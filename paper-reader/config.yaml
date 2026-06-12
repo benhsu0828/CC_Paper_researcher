@@ -1,0 +1,46 @@
+# 主題：改這裡即可切換研究領域，下次執行自動套用
+# topic 用於 LLM 的相關性判斷；arxiv_query / s2_query 是實際送出的搜尋字串（高召回，靠後續排序+篩選收斂）
+topic: "badminton action analysis, pose estimation, and AI coaching"
+
+# 每晚閱讀篇數（每篇 ≈ 3 個 sonnet session）
+papers_per_run: 3
+
+# Discovery 階段：搜尋字串、候選數量與時間範圍
+discovery:
+  arxiv_query: "badminton"                              # arXiv 搜尋字串（單概念高召回）
+  s2_query: "badminton action recognition pose estimation"  # Semantic Scholar 搜尋字串
+  candidates: 40            # 粗排前的候選池大小
+  recent_days: 365          # arXiv 只取最近 N 天（羽球領域論文較少，放寬到一年）
+  min_year: 2022            # Semantic Scholar 最低年份
+
+# 排序權重（Ranking 階段，haiku 評分用）
+priority_mix:
+  recency_weight: 0.4
+  citation_weight: 0.4
+  relevance_weight: 0.2
+
+# 各 stage 使用的模型（有效果就好，不一定用最貴）
+models:
+  rank: haiku
+  screen: opus
+  read: sonnet
+  extract: haiku       # 從 report.html 萃取 analysis.json（便宜）
+  review: sonnet
+
+reader:
+  style: academic          # 固定 academic（不開放其他風格）
+  language: zh-TW
+
+# enrich 階段（純 Python，零額度）：公式轉 MathML + 從 PDF 抽圖 base64 內嵌
+figures:
+  enabled: true
+  max_extract: 12          # 最多抽幾張原文圖表
+
+reviewer:
+  mode: quick              # quick | full | methodology-focus
+
+sources:
+  arxiv: true
+  semantic_scholar: true
+
+zotero_integration: false  # 預留

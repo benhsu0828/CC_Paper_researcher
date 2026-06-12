@@ -1,0 +1,22 @@
+# 已讀論文排除清單：discovery 會以「標題正規化後比對」過濾掉這些，永不重複處理。
+# 標題去除標點/空白、轉小寫後做子字串比對（中英文皆可），所以填主標題即可。
+already_read:
+  - "Action Classification Based on 2D Coordinates Obtained by Real-time Pose Estimation"
+  - "Enhanced Pose Estimation for Badminton Players via Improved YOLOv8-Pose with Efficient Local Attention"
+  - "FastDTW: Toward Accurate Dynamic Time Warping in Linear Time and Space"
+  - "基於單鏡頭影像結合邊界條件重建 3D 羽球軌跡"
+  - "AI羽球教練: 全新訓練典範"
+  - "基於人體骨架擷取於動作相似度分析之研究"
+  - "TrackNet1000: 高效羽球偵測之網路設計與建模訓練"
+  - "智慧羽球擊球姿勢判定建議系統"
+  - "RotJoint-based pose comparison"
+  - "Time2Lang"
+  - "Counterfactual Explanation-Based Badminton Motion Guidance Generation Using Wearable Sensors"
+  - "SportsGPT"
+  - "Technical Report of CoachAI Challenge 2023: Team NTNUEE AIoTLab"
+  - "基於深度學習之羽球動作分析系統"
+  - "LLM-FMS: A fine-grained dataset for functional movement screen action quality assessment"
+  - "Benchmarking Badminton Action Recognition with a New Fine-Grained Dataset"
+  - "An AI-Powered Personalised Badminton Training System with Frame-by-Frame Correction"
+  - "A Unified Deep Learning Framework for Pose-Based Badminton Stroke Recognition and Skill Assessment"
+  - "CoachMe: Decoding Sport Elements with a Reference-Based Coaching Instruction Generation Model"

@@ -1,0 +1,13 @@
+[Unit]
+Description=paper-reader nightly run (discovery -> per-paper read/enrich/review/publish)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/CC_Paper_researcher/paper-reader
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.local/bin/uv run python main.py
+TimeoutStartSec=14400
+StandardOutput=append:%h/CC_Paper_researcher/paper-reader/data/logs/nightly.log
+StandardError=append:%h/CC_Paper_researcher/paper-reader/data/logs/nightly.log
