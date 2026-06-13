@@ -6,7 +6,7 @@
 ## 執行
 
 ```bash
-cd /home/ben/CC_Paper_researcher/paper-reader
+cd /home/ben/CC_Paper_researcher
 uv run python main.py                                 # 預設＝完整夜跑：discovery + 逐篇一條龍
 uv run python main.py --dry-run                       # 只跑 Discovery（零額度）
 uv run python main.py --limit 1 --stages rank,screen,read,enrich   # 手動逐 stage（補跑/除錯）
@@ -78,4 +78,4 @@ discovery → rank → screen → read → enrich → review → publish
 NOTION_TOKEN / NOTION_PARENT_PAGE_ID（page `37cddeca…`）/ NOTION_DATABASE_ID（已自動建並寫回：`37dddeca…`）/
 DISCORD_BOT_TOKEN / DISCORD_CHANNEL_ID(1514458061014700143) / SEMANTIC_SCHOLAR_API_KEY
 
-規劃草稿 `../5-token-…fluttering-lake.md`（git 忽略，可能含 token）
+規劃草稿 `5-token-…fluttering-lake.md`（git 忽略，可能含 token）

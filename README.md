@@ -3,7 +3,7 @@
 每晚自動「找論文 → 排序 → 篩選 → 深讀 → 後處理 → 審稿 → 輸出到 Notion + Discord」的論文閱讀系統。
 
 跑在本機 Linux，用 **Claude Agent SDK + Claude Code 訂閱**（不是 API key、不按 token 計費）。
-主程式在 [`paper-reader/`](paper-reader/)。
+入口為本目錄的 [`main.py`](main.py)。
 
 ## 它會做什麼
 
@@ -23,7 +23,6 @@
 需求：Python 3.11+、[uv](https://docs.astral.sh/uv/)、已登入的 Claude Code 訂閱（CLI 在 `~/.local/bin/claude`）。
 
 ```bash
-cd paper-reader
 uv sync                          # 安裝相依
 uv run playwright install chromium   # 截整體架構圖 PNG 用（約 150MB，一次性）
 cp .env.example .env             # 填入金鑰（見下）
@@ -37,12 +36,11 @@ cp .env.example .env             # 填入金鑰（見下）
 | `DISCORD_BOT_TOKEN` / `DISCORD_CHANNEL_ID` | Discord 通知 |
 | `SEMANTIC_SCHOLAR_API_KEY` | Semantic Scholar 搜尋（選用，提高額度） |
 
-研究主題改 [`paper-reader/config.yaml`](paper-reader/config.yaml) 的 `topic` 即可切換領域。
+研究主題改 [`config.yaml`](config.yaml) 的 `topic` 即可切換領域。
 
 ## 執行
 
 ```bash
-cd paper-reader
 uv run python main.py                 # 完整夜跑：discovery + 逐篇一條龍
 uv run python main.py --dry-run       # 只跑 discovery（零額度），列候選
 uv run python main.py --limit 1       # 限本次 1 篇
@@ -65,7 +63,6 @@ uv run python main.py --add-url https://example.com/paper.pdf       # 任意 PDF
 ## 每晚自動（systemd --user timer）
 
 ```bash
-cd paper-reader
 bash deploy/install_systemd.sh        # 安裝並啟用每晚 03:00 的計時器
 systemctl --user start paper-reader.service   # 手動測試一次
 journalctl --user -u paper-reader.service -f  # 看日誌
@@ -73,11 +70,11 @@ journalctl --user -u paper-reader.service -f  # 看日誌
 
 ## 架構與設計細節
 
-完整的 pipeline 設計、各階段實作、關鍵決策與 `.env` 清單見 [`paper-reader/CLAUDE.md`](paper-reader/CLAUDE.md)。
+完整的 pipeline 設計、各階段實作、關鍵決策與 `.env` 清單見 [`CLAUDE.md`](CLAUDE.md)。
 
 ## 內含的 skills
 
-[`paper-reader/.claude/skills/`](paper-reader/.claude/skills/) 內附兩個 Claude Code skill（已隨專案打包，自包含）：
+[`.claude/skills/`](.claude/skills/) 內附兩個 Claude Code skill（已隨專案打包，自包含）：
 
 - **paper-analyzer** — 深讀論文 → 精美 HTML 長文（含 Mermaid 圖、公式）。
 - **academic-paper-reviewer** — 多視角學術審稿（EIC + 3 reviewers + Devil's Advocate）。

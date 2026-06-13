@@ -1,6 +1,5 @@
 # 資料與密鑰（不進版控）
-paper-reader/data/
-paper-reader/.env
+data/
 .env
 
 # Python
@@ -8,7 +7,7 @@ __pycache__/
 *.pyc
 *.pyo
 .venv/
-paper-reader/.venv/
+uv.lock
 
 # 規劃草稿（可能含 token，不進版控）
 5-token-*.md
