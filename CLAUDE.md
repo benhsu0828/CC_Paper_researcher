@@ -39,6 +39,9 @@ discovery → rank → screen → read → enrich → review → publish
 
 ## 關鍵設計與決策
 
+- **研究脈絡感知篩選（research_profile.md）**：使用者可建 `research_profile.md`（自由文字、git 忽略、範本 `research_profile.example.md`）寫目前研究進度/實驗架構/想解決的問題。`config.load_research_profile()` 載入（rank 取前 ~800 字精簡版省 haiku context、screen 取完整版），`research_profile_block()` 包成 prompt 區塊注入 ranker.md/screener.md 的 `{research_profile}`。**rank 新增 `fit` 維度**（對我研究的可用性，0–100）：有 profile 時 `rel=(relevance+novelty+2*fit)/4`、無 profile 或 fit 缺值退回 `(relevance+novelty)/2`（行為不變，不動 priority_mix 外層權重）。**向後相容**：無此檔一切照舊。
+- **探索名額（2 核心 + 1 探索）**：screen 把每篇標 `core`（貼近目前進度、可直接用）/`explore`（相關但跳脫進度的創新方向）/`skip`。`config.yaml` 的 `screening.exploration_slots`（預設 1）保留 N 篇 explore，其餘給 core；某軌不足以另一軌依 rank 序回補（不浪費總名額）。選中存 `screen_track` 欄（queue 遷移加）。**需有 research_profile.md 才生效**（否則無從分辨「進度」，自動全當 core）。Discord 標題標 `🎯 核心`/`🧭 探索`。
+- **Token 用量可見（夜跑總結 + 每篇 footer）**：SDK `ResultMessage` 帶 `usage`/`total_cost_usd`，`runner.run_stage` 收到後呼叫 `src/store/usage.py`（記憶體內累計，零持久化）的 `record()`。`orchestrator.run_nightly` 開頭 `reset()`、每篇前 `begin_paper(aid)`；每篇 Discord 通知 footer 顯示該篇 token 小計，夜跑結束 `discord.notify_summary()` 發總結（完成數/核心探索分佈/整夜 in·out tokens/估算成本/耗時）。訂閱制不實扣，cost 僅供估量、cache token 折進 input。
 - **不用 Gemini 生圖**（key 是 Vertex Express、需開帳單，用戶改方向）。圖改成：架構/流程圖由 paper-analyzer 畫 **Mermaid**；原文圖表用 **PyMuPDF 依圖說(caption)裁切頁面區域**（雙欄論文做欄位偵測，只裁該欄）→ base64。見 `enrich.py` 的 `_caption_crops`。
 - **公式必須 MathML**（不用 KaTeX/LaTeX 文字/Unicode）→ `enrich.py` 用 `latex2mathml` 轉 `$$…$$`/`\(…\)`/`\[…\]`，移除 KaTeX CDN。
 - **Notion 不吃完整 HTML**（report.html 含 base64 圖達 256KB）→ `output/notion.py` 改用「結構化 block」：properties（標題/arXiv/連結/發表日/創新分/相關分/審稿分/審稿結論 select/引用數/主題/處理日）+ 內文 block（銳評 callout、analysis 各節 heading+paragraph、審稿優缺點 bullets），完整 HTML 留本機並由 Discord 夾帶。Notion 限制：單 rich_text ≤2000 字（切 1900）、單次建頁 children ≤100 block。
@@ -59,8 +62,10 @@ discovery → rank → screen → read → enrich → review → publish
 - `src/agent.py` — `build_options(stage)`：模型、工具、安全 hooks（write 限 data/**+/tmp/**、WebFetch 白名單）、`setting_sources=["project"]` 載入 `.claude/skills/`
 - `src/runner.py` — `run_stage()` + `extract_json()` + QuotaExhausted
 - `src/store/queue.py` — SQLite（`data/queue.db`）+ `papers_log.csv` 匯出
-- `src/config.py` — PROJECT_ROOT、load_config、.env（`load_dotenv`）
-- `src/output/` — `notion.py`（建 DB/頁/上傳檔/append）、`discord.py`、`render.py`（Mermaid→PNG）、`report_parse.py`（HTML→block）、`text.py`（OpenCC）
+- `src/config.py` — PROJECT_ROOT、load_config、.env（`load_dotenv`）、`load_research_profile()`/`research_profile_block()`
+- `src/store/usage.py` — 夜跑 token 用量記憶體累計（reset/begin_paper/record/paper_totals/grand_total）
+- `research_profile.example.md` — 研究脈絡範本（複製成 `research_profile.md` 填寫，後者 git 忽略）
+- `src/output/` — `notion.py`（建 DB/頁/上傳檔/append）、`discord.py`（每篇通知 + `notify_summary` 夜跑總結）、`render.py`（Mermaid→PNG）、`report_parse.py`（HTML→block）、`text.py`（OpenCC）
 - `src/pipeline/orchestrator.py` — `run()`（逐 stage）+ `process_paper()`/`run_nightly()`（逐篇一條龍）
 - `deploy/` — systemd `paper-reader.service`/`.timer` + `install_systemd.sh`
 - `.claude/skills/` — paper-analyzer、academic-paper-reviewer（**已隨專案打包成實體目錄**，非 symlink）
@@ -71,6 +76,7 @@ discovery → rank → screen → read → enrich → review → publish
 - ✅ **M4** review + publish（Notion 建頁 + Discord）；**M4.1** 全程台灣繁體（OpenCC s2twp）；**M4.2** Notion 頁精選版（銳評 + 後設資料 + 整體架構圖 PNG + 四章節原文）
 - ✅ **M5：逐篇一條龍 + systemd 每晚自動** — `process_paper`/`run_nightly`（狀態感知、單篇失敗不擋其他、額度 graceful stop）；`main.py` 預設＝夜跑、`--paper` 單篇端到端；systemd --user timer 每晚 03:00（`deploy/install_systemd.sh`，已安裝啟用）
 - ✅ **code-review + 打包成自包含 GitHub 專案** — 修兩處（process_paper 處理 queued、Notion >100 block 分批 append）；把兩個 skill 從 symlink 改成實體目錄打包進 `.claude/skills/`，刪除上層 `academic-research-skills`/`paper-craft-skills`；加 README + 根 `.gitignore` + `.env.example`；initial commit 已 push 到 `github.com/benhsu0828/CC_Paper_researcher`（main）
+- ✅ **M6：研究脈絡感知 + 探索名額 + token 可見** — `research_profile.md`（rank/screen 注入 + fit 維度）；`screening.exploration_slots` 兩軌篩選（核心/探索，`screen_track`）；`src/store/usage.py` token 累計 → 每篇 Discord footer + 夜跑總結（`notify_summary`）
 - ⬜ 後續可做：跨夜實跑驗證（首夜 03:00）、papers_log.csv 補 review_verdict 欄、長報告 >100 block 的實測
 
 ## .env（git 忽略；範本見 `.env.example`）

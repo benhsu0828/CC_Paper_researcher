@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock, query
 
 from src.agent import build_options
+from src.store import usage as usage_store
 
 log = logging.getLogger("runner")
 
@@ -29,6 +30,9 @@ class RunResult:
     session_id: str | None = None
     result_raw: str = ""
     sdk_error: str | None = None         # SDK 在 session 結束時丟出的錯誤（多半無害）
+    usage: dict | None = None            # token 用量（input/output/cache…）
+    cost_usd: float | None = None        # API 等價成本（訂閱不實扣，僅供估量）
+    num_turns: int = 0
 
 
 async def run_stage(stage: str, prompt: str, max_turns: int | None = None) -> RunResult:
@@ -50,6 +54,10 @@ async def run_stage(stage: str, prompt: str, max_turns: int | None = None) -> Ru
                 out.session_id = msg.session_id
                 out.result_raw = msg.result or ""
                 out.is_error = bool(getattr(msg, "is_error", False))
+                out.usage = getattr(msg, "usage", None)
+                out.cost_usd = getattr(msg, "total_cost_usd", None)
+                out.num_turns = getattr(msg, "num_turns", 0) or 0
+                usage_store.record(out.usage, out.cost_usd)  # 累計到目前論文/整夜總計
     except Exception as e:  # noqa: BLE001
         text = str(e)
         if any(m in text.lower() for m in _LIMIT_MARKERS):

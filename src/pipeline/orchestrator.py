@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from src.config import load_config
 from src.pipeline import ranker, screener
 from src.runner import QuotaExhausted
-from src.store import queue
+from src.store import queue, usage
 
 log = logging.getLogger("orchestrator")
 
@@ -113,12 +114,14 @@ async def run_nightly(limit: int | None = None, paper: str | None = None) -> Non
     """
     cfg = load_config()
     limit = limit or cfg.get("papers_per_run", 3)
+    usage.reset()  # 開始累計本次 token 用量
 
     if paper:  # 手動指定單篇：直接一條龍
         row = queue.get(paper)
         if not row:
             log.warning("找不到論文：%s", paper)
             return
+        usage.begin_paper(paper)  # 讓該篇 Discord footer 能算出 token 小計
         try:
             await process_paper(row, cfg)
         except QuotaExhausted as e:
@@ -126,7 +129,9 @@ async def run_nightly(limit: int | None = None, paper: str | None = None) -> Non
         queue.export_csv()
         return
 
+    started = time.time()
     try:
+        usage.begin_paper(None)  # rank/screen 記到整夜總計、不歸給單篇
         await ranker.rank(cfg)
         await screener.screen(cfg, limit)
     except QuotaExhausted as e:
@@ -144,6 +149,7 @@ async def run_nightly(limit: int | None = None, paper: str | None = None) -> Non
     done = 0
     for row in todo:
         aid = row["arxiv_id"]
+        usage.begin_paper(aid)
         try:
             if await process_paper(row, cfg):
                 done += 1
@@ -151,6 +157,7 @@ async def run_nightly(limit: int | None = None, paper: str | None = None) -> Non
         except QuotaExhausted as e:
             log.warning("額度耗盡，graceful stop（已完成 %d 篇）：%s", done, e)
             queue.export_csv()
+            _send_summary(done, todo, started, stopped="額度耗盡")
             return
         except Exception as e:  # noqa: BLE001 單篇失敗不擋其他
             log.error("論文 %s 處理失敗，跳過：%s", aid, e)
@@ -159,3 +166,16 @@ async def run_nightly(limit: int | None = None, paper: str | None = None) -> Non
 
     queue.export_csv()
     log.info("夜跑結束：成功 %d / 待處理 %d", done, len(todo))
+    _send_summary(done, todo, started)
+
+
+def _send_summary(done: int, todo: list[dict], started: float, stopped: str = "") -> None:
+    """夜跑結束發一則 Discord 總結（含 token 用量），白天回顧昨晚消耗。"""
+    try:
+        from src.output import discord  # lazy：避免 orchestrator 載入時就拉 output 依賴
+        discord.notify_summary(
+            done=done, todo=todo, total_usage=usage.grand_total(),
+            seconds=time.time() - started, stopped=stopped,
+        )
+    except Exception as e:  # noqa: BLE001 通知失敗不影響夜跑結果
+        log.warning("夜跑總結通知失敗：%s", e)

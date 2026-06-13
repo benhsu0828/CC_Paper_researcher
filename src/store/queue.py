@@ -52,6 +52,7 @@ _MIGRATIONS = [
     "ALTER TABLE papers ADD COLUMN review_verdict TEXT",   # 審稿結論（如 推薦/小修/大修/拒）
     "ALTER TABLE papers ADD COLUMN review_take TEXT",      # 一句銳評
     "ALTER TABLE papers ADD COLUMN published_at TEXT",     # 寫入 Notion 的時間
+    "ALTER TABLE papers ADD COLUMN screen_track TEXT",     # 篩選軌：core（貼近進度）/ explore（跳脫進度的創新）
 ]
 
 

@@ -5,6 +5,13 @@ topic: "badminton action analysis, pose estimation, and AI coaching"
 # 每晚閱讀篇數（每篇 ≈ 3 個 sonnet session）
 papers_per_run: 3
 
+# 篩選（Screening 階段）
+screening:
+  # 每晚保留幾篇「主題相關但跳脫目前進度」的探索/創新方向（其餘名額給貼近進度的核心論文）。
+  # 例：papers_per_run=3 + exploration_slots=1 → 2 篇核心 + 1 篇探索。
+  # 需有 research_profile.md 才生效（否則無從分辨「進度」，自動失效、全部當核心挑）。
+  exploration_slots: 1
+
 # Discovery 階段：搜尋字串、候選數量與時間範圍
 discovery:
   arxiv_query: "badminton"                              # arXiv 搜尋字串（單概念高召回）

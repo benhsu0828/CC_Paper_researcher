@@ -5,11 +5,19 @@ from __future__ import annotations
 import logging
 from datetime import date
 
-from src.config import PROJECT_ROOT, load_config
+from src.config import (
+    PROJECT_ROOT,
+    load_config,
+    load_research_profile,
+    research_profile_block,
+)
 from src.runner import extract_json, run_stage
 from src.store import queue
 
 log = logging.getLogger("ranker")
+
+# rank 用 haiku、要評整池論文，研究脈絡只取精簡前段以省 context
+RANK_PROFILE_CHARS = 800
 
 
 def _recency_score(published: str, recent_days: int) -> float:
@@ -38,8 +46,14 @@ async def rank(cfg: dict | None = None) -> int:
         log.info("沒有 queued 論文可排序")
         return 0
 
+    profile = load_research_profile(max_chars=RANK_PROFILE_CHARS)
+    has_profile = bool(profile)
     template = (PROJECT_ROOT / "prompts" / "ranker.md").read_text(encoding="utf-8")
-    prompt = template.format(topic=cfg["topic"], papers=_format_papers(rows))
+    prompt = template.format(
+        topic=cfg["topic"],
+        research_profile=research_profile_block(profile),
+        papers=_format_papers(rows),
+    )
 
     res = await run_stage("rank", prompt)
     scores = extract_json(res.text) or extract_json("\n".join(res.all_text))
@@ -60,7 +74,14 @@ async def rank(cfg: dict | None = None) -> int:
         s = by_index.get(i)
         if not s:
             continue
-        rel = (s.get("relevance", 0) + s.get("novelty", 0)) / 2 / 100.0
+        relq = s.get("relevance", 0)
+        novq = s.get("novelty", 0)
+        fitq = s.get("fit")
+        # 有研究脈絡時，fit（對我研究的可用性）加權主導；無脈絡或 fit 缺值退回二維平均（行為不變）
+        if has_profile and isinstance(fitq, (int, float)):
+            rel = (relq + novq + 2 * fitq) / 4 / 100.0
+        else:
+            rel = (relq + novq) / 2 / 100.0
         rec = _recency_score(r.get("published") or "", recent_days)
         cit = (r.get("citation_count") or 0) / cmax
         final = 100 * (w_rec * rec + w_cit * cit + w_rel * rel)
