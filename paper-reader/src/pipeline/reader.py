@@ -81,12 +81,16 @@ async def read_one(row: dict, cfg: dict | None = None) -> bool:
         if not pdf_path.exists():
             _download_pdf(row.get("pdf_url") or "", pdf_path)  # 失敗不致命，skill 可改抓 arXiv 全文
 
+        # arXiv 論文給 abs 連結；手動加入（非 arXiv）論文沒有就請 skill 直接讀本地 PDF
+        if row.get("url"):
+            url = row["url"]
+        elif aid.startswith("manual-"):
+            url = "（本論文非 arXiv，請直接閱讀上方本地 PDF）"
+        else:
+            url = f"https://arxiv.org/abs/{aid}"
         template = (PROJECT_ROOT / "prompts" / "reader.md").read_text(encoding="utf-8")
         prompt = template.format(
-            title=title,
-            url=row.get("url") or f"https://arxiv.org/abs/{aid}",
-            pdf_path=str(pdf_path),
-            out_dir=str(out_dir),
+            title=title, url=url, pdf_path=str(pdf_path), out_dir=str(out_dir),
         )
         log.info("開始閱讀：%s（%s）", title[:50], aid)
         res = await run_stage("read", prompt)

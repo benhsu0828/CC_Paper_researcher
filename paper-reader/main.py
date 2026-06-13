@@ -7,20 +7,26 @@
     python main.py --stages rank,screen   # 手動只跑指定 stage（逐 stage，補跑/除錯用）
     python main.py --paper 2401.12345     # 把單篇一條龍跑到 published
     python main.py --paper 2401.12345 --stages publish --refresh  # 重發某篇的 Notion 頁
+    python main.py --add-pdf ./my.pdf --title "論文標題"   # 加一篇非 arXiv 論文（本地 PDF）並跑完
+    python main.py --add-url https://example.com/paper.pdf # 加一篇非 arXiv 論文（PDF 連結）並跑完
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import logging
+import shutil
 import sys
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from src.config import load_config
+from src.config import PAPERS_DIR, load_config
 from src.pipeline import discovery
+from src.pipeline.reader import safe_id
 from src.store import queue
 
 log = logging.getLogger("main")
@@ -57,6 +63,43 @@ def run_discovery(cfg: dict) -> int:
     return new
 
 
+def add_manual_paper(cfg: dict, *, pdf: str | None = None,
+                     url: str | None = None, title: str | None = None) -> str:
+    """加一篇非 arXiv 論文到佇列（status=queued），回傳其 id。
+
+    pdf：本地 PDF 路徑（會複製到 data/papers/<id>/paper.pdf，reader 直接讀）。
+    url：PDF 連結（reader 用 httpx 下載，不受 WebFetch 白名單限制）。
+    """
+    key = str(Path(pdf).resolve()) if pdf else (url or "")
+    if not key:
+        raise SystemExit("--add-pdf 或 --add-url 至少給一個")
+    aid = "manual-" + hashlib.md5(key.encode()).hexdigest()[:10]
+
+    display = title or (Path(pdf).stem if pdf else url)
+    queue.upsert_candidates([{
+        "arxiv_id": aid,
+        "title": display,
+        "url": url or "",
+        "pdf_url": (url or "") if not pdf else "",
+        "abstract": "",
+        "source": "manual",
+        "topic": cfg.get("topic"),
+        "citation_count": 0,
+        "published": date.today().isoformat(),
+    }])
+
+    if pdf:
+        src = Path(pdf)
+        if not src.exists():
+            raise SystemExit(f"找不到 PDF：{pdf}")
+        out_dir = PAPERS_DIR / safe_id(aid)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy(src, out_dir / "paper.pdf")
+
+    log.info("已加入手動論文：%s（%s）", aid, display)
+    return aid
+
+
 def main() -> None:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
@@ -70,6 +113,12 @@ def main() -> None:
     parser.add_argument("--paper", type=str, default=None, help="手動補跑單篇 arxiv_id")
     parser.add_argument("--refresh", action="store_true",
                         help="publish 時若已有 Notion 頁則封存舊頁、重建（用於更新內容）")
+    parser.add_argument("--add-pdf", type=str, default=None,
+                        help="加一篇非 arXiv 論文（本地 PDF 路徑）並一條龍跑完")
+    parser.add_argument("--add-url", type=str, default=None,
+                        help="加一篇非 arXiv 論文（PDF 連結）並一條龍跑完")
+    parser.add_argument("--title", type=str, default=None,
+                        help="搭配 --add-pdf/--add-url 指定論文標題（建議填）")
     args = parser.parse_args()
 
     cfg = load_config()
@@ -82,6 +131,13 @@ def main() -> None:
         return
 
     from src.pipeline import orchestrator
+
+    if args.add_pdf or args.add_url:
+        # 加一篇非 arXiv 論文，然後一條龍跑到 published
+        queue.init_db()
+        aid = add_manual_paper(cfg, pdf=args.add_pdf, url=args.add_url, title=args.title)
+        asyncio.run(orchestrator.run_nightly(paper=aid))
+        return
 
     if args.stages:
         # 手動指定階段（補跑/除錯）：沿用逐 stage 流程

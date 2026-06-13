@@ -314,10 +314,13 @@ def _properties(row: dict, review: dict) -> dict:
     def num(v):
         return float(v) if isinstance(v, (int, float)) else None
 
+    aid = str(row.get("arxiv_id") or "")
+    # arXiv 論文補 abs 連結；手動加入（非 arXiv）論文用其來源 url，沒有就不放連結
+    link = row.get("url") or (f"https://arxiv.org/abs/{aid}"
+                              if aid and not aid.startswith("manual-") else "")
     props: dict = {
         "Title": {"title": _rt((row.get("title") or "(無題)")[:1900])},
-        "arXiv": {"rich_text": _rt(row.get("arxiv_id") or "")},
-        "連結": {"url": row.get("url") or f"https://arxiv.org/abs/{row.get('arxiv_id')}"},
+        "arXiv": {"rich_text": _rt(aid)},
         "創新分": {"number": num(row.get("innovation_score"))},
         "相關分": {"number": num(row.get("relevance_score"))},
         "審稿分": {"number": num(review.get("recommendation_score"))},
@@ -325,6 +328,8 @@ def _properties(row: dict, review: dict) -> dict:
         "主題": {"rich_text": _rt((row.get("topic") or "")[:1900])},
         "處理日": {"date": {"start": date.today().isoformat()}},
     }
+    if link:
+        props["連結"] = {"url": link}
     pub = (row.get("published") or "")[:10]
     if len(pub) == 10:
         props["發表日"] = {"date": {"start": pub}}

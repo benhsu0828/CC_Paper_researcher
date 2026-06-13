@@ -49,6 +49,8 @@ async def publish_one(row: dict, cfg: dict | None = None, refresh: bool = False)
 
     # 解析 report.html：後設資料 + 指定章節
     metadata = report_parse.parse_metadata(html, aid) if html else {}
+    if aid.startswith("manual-"):  # 非 arXiv：用來源 url（沒有就不顯示連結），不要 bogus arXiv 連結
+        metadata["arXiv"] = row.get("url") or ""
     sections = [report_parse.section_items(html, kws) for kws in NOTION_SECTIONS] if html else []
     sections = [s for s in sections if s]
 

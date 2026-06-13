@@ -50,6 +50,18 @@ uv run python main.py --paper 2501.00001          # 把單篇一條龍跑到 pub
 uv run python main.py --paper <id> --stages publish --refresh   # 重發某篇的 Notion 頁
 ```
 
+### 讀「不在 arXiv 上」的論文
+
+把任一篇論文（本地 PDF 或 PDF 連結）加進來並一條龍跑完：
+
+```bash
+uv run python main.py --add-pdf ./某論文.pdf --title "論文標題"      # 本地 PDF
+uv run python main.py --add-url https://example.com/paper.pdf       # 任意 PDF 連結（非 arXiv 也行）
+```
+
+會以 `manual-<hash>` 為 id 入庫、把 PDF 放到 `data/papers/<id>/paper.pdf`，
+然後 read→enrich→review→publish。`--title` 建議填（沒填會用檔名/網址當標題）。
+
 ## 每晚自動（systemd --user timer）
 
 ```bash
