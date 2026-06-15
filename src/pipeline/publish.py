@@ -1,7 +1,7 @@
 """Publish 階段（純 Python，零 LLM 額度）：寫 Notion + Discord 通知。
 
 Notion 頁＝銳評 + 後設資料 + 整體架構總覽圖（Mermaid 截圖）+ 指定章節原文
-（討論/侷限/研究脈絡/產品落地，從 report.html 抽出）。原文表格數字看 arXiv。
+（快速抓重點/對自身研究的幫助/討論/侷限/研究脈絡/產品落地，從 report.html 抽出）。原文表格數字看 arXiv。
 完整 report.html 仍由 Discord 夾帶。
 成功 → status='published'；Notion 失敗致命（保留可重跑），Discord 失敗只記 warning。
 """
@@ -23,7 +23,8 @@ from src.store import queue
 log = logging.getLogger("publish")
 
 # 要放進 Notion 的章節（依 h2 標題關鍵字比對），順序即頁面呈現順序
-NOTION_SECTIONS = [["討論"], ["侷限"], ["研究脈絡"], ["產品落地"]]
+NOTION_SECTIONS = [["快速抓重點"], ["對自身研究的幫助"], ["實驗"],
+                   ["討論"], ["侷限"], ["研究脈絡"], ["產品落地"]]
 
 
 def _load_json(path) -> dict:
@@ -43,6 +44,7 @@ async def publish_one(row: dict, cfg: dict | None = None, refresh: bool = False)
     aid = row["arxiv_id"]
     out_dir = PAPERS_DIR / safe_id(aid)
     review = _load_json(out_dir / "review.json")
+    analysis = _load_json(out_dir / "analysis.json")
     report = out_dir / "report.html"
     report_path = str(report) if report.exists() else ""
     html = report.read_text(encoding="utf-8") if report.exists() else ""
@@ -69,7 +71,8 @@ async def publish_one(row: dict, cfg: dict | None = None, refresh: bool = False)
             try:
                 notion_url = notion.publish_paper(
                     row, review, metadata, sections,
-                    arch_png_path=arch_path, archive_url=archive_url)
+                    arch_png_path=arch_path, archive_url=archive_url,
+                    tags=analysis.get("tags") if isinstance(analysis, dict) else None)
                 log.info("Notion 頁面已建立：%s → %s", aid, notion_url)
             except Exception as e:  # noqa: BLE001
                 queue.update(aid, status="error", error_msg=f"Notion 失敗：{str(e)[:200]}")

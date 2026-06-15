@@ -6,6 +6,7 @@
 
 ```json
 {{
+  "tags": ["3–6 個繁中領域標籤，如 人體骨架辨識／動作分類／羽球／多模態學習"],
   "summary": "核心問題與價值（Gap）、What/Why/How",
   "contributions": "關鍵創新點（Novelty）：新的部分 vs 整合既有；移除創新點後還剩什麼",
   "methodology": "方法流程 Input→Process→Output",

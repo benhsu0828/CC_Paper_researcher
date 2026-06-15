@@ -9,6 +9,7 @@
     python main.py --paper 2401.12345 --stages publish --refresh  # 重發某篇的 Notion 頁
     python main.py --add-pdf ./my.pdf --title "論文標題"   # 加一篇非 arXiv 論文（本地 PDF）並跑完
     python main.py --add-url https://example.com/paper.pdf # 加一篇非 arXiv 論文（PDF 連結）並跑完
+    python main.py --serve                # 常駐：監聽 Discord 指令（!read）隨時讀庫存論文
 """
 
 from __future__ import annotations
@@ -107,6 +108,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="自動論文閱讀系統")
     parser.add_argument("--dry-run", action="store_true",
                         help="只跑 Discovery（零額度），不呼叫任何 LLM")
+    parser.add_argument("--serve", action="store_true",
+                        help="常駐：監聽 Discord 指令（!read／!read N／!read <id>／!status）")
     parser.add_argument("--limit", type=int, default=None, help="本次處理篇數上限")
     parser.add_argument("--stages", type=str, default=None,
                         help=f"逗號分隔的 stage（{','.join(ALL_STAGES)}）")
@@ -128,6 +131,13 @@ def main() -> None:
         rows = queue.fetch(order="citation_count DESC")
         _print_candidates(rows)
         print(f"\nCSV 已寫到 {queue.CSV_PATH}")
+        return
+
+    if args.serve:
+        # 常駐監聽 Discord 指令（zero 額度直到收到 !read）
+        from src.output import discord_bot
+        queue.init_db()
+        asyncio.run(discord_bot.serve())
         return
 
     from src.pipeline import orchestrator

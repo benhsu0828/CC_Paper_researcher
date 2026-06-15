@@ -42,6 +42,8 @@ _DB_PROPERTIES = {
     "引用數": {"number": {}},
     "主題": {"rich_text": {}},
     "處理日": {"date": {}},
+    # 給使用者手動勾的 check list（pipeline 不寫此欄，refresh 也不碰）
+    "已精讀": {"checkbox": {}},
 }
 
 
@@ -332,11 +334,31 @@ def _review_blocks(row: dict, review: dict) -> list[dict]:
     return blocks
 
 
+def _tags_block(tags: list | None) -> dict | None:
+    """把領域標籤組成頁面最上面一行 hashtag（粗體灰字）；無標籤回 None。"""
+    items: list[str] = []
+    for t in tags or []:
+        s = to_traditional(str(t)).strip().replace(" ", "")
+        if s:
+            items.append("#" + s)
+    if not items:
+        return None
+    return {"object": "block", "type": "paragraph", "paragraph": {"rich_text": [
+        {"type": "text", "text": {"content": "　".join(items)},
+         "annotations": {"bold": True, "color": "gray"}}]}}
+
+
 def _build_children(row: dict, review: dict, metadata: dict,
                     sections: list[list[dict]],
-                    arch_upload_id: str | None = None) -> list[dict]:
-    """組裝 Notion 頁內容：銳評 → 後設資料 → 整體架構總覽圖 → 指定章節原文。"""
+                    arch_upload_id: str | None = None,
+                    tags: list | None = None) -> list[dict]:
+    """組裝 Notion 頁內容：標籤 → 銳評 → 後設資料 → 整體架構總覽圖 → 指定章節原文。"""
     blocks: list[dict] = []
+
+    # 0) 領域標籤 hashtag（頁面最上面一行）
+    tag_block = _tags_block(tags)
+    if tag_block:
+        blocks.append(tag_block)
 
     # 1) 審稿銳評（快速判斷層）
     blocks.extend(_review_blocks(row, review))
@@ -350,7 +372,7 @@ def _build_children(row: dict, review: dict, metadata: dict,
         blocks.append(_heading("整體架構總覽"))
         blocks.append(_image_block(arch_upload_id))
 
-    # 4) 指定章節原文（討論 / 侷限 / 研究脈絡 / 產品落地）
+    # 4) 指定章節原文（快速抓重點 / 對自身研究的幫助 / 討論 / 侷限 / 研究脈絡 / 產品落地）
     for items in sections:
         blocks.extend(_items_to_blocks(items))
 
@@ -390,20 +412,21 @@ def _properties(row: dict, review: dict) -> dict:
 
 def publish_paper(row: dict, review: dict, metadata: dict,
                   sections: list[list[dict]], arch_png_path: str | None = None,
-                  archive_url: str | None = None) -> str:
+                  archive_url: str | None = None, tags: list | None = None) -> str:
     """在 database 建立一頁，回傳 page url。
 
     metadata：作者/通訊作者/arXiv/資料集/程式碼狀態。
     sections：指定章節的中間 items（每段以 h2 開頭）。
     arch_png_path：整體架構總覽圖，上傳成 image 區塊（失敗不致命）。
     archive_url：refresh 重發時，先封存的舊頁 url。
+    tags：領域標籤，組成頁面最上面一行 hashtag。
     """
     with httpx.Client(timeout=120) as client:
         if archive_url:
             archive_page(client, archive_url)
         db_id = ensure_database(client)
         arch_id = upload_file(client, arch_png_path, "image/png") if arch_png_path else None
-        blocks = _build_children(row, review, metadata, sections, arch_id)
+        blocks = _build_children(row, review, metadata, sections, arch_id, tags)
 
         # Notion 單次請求 children 上限 100：先建頁帶前 100，其餘分批 append
         body = {

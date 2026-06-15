@@ -1,30 +1,30 @@
-Cover theme: 学术论文5分钟速读
+Cover theme: 學術論文5分鐘速讀
 Style: minimal
 
-Title text: 论文速读
-Subtitle: 5分钟精炼分享
+Title text: 論文速讀
+Subtitle: 5分鐘精煉分享
 
 Visual composition:
-- Main visual: 一本打开的学术论文书籍,周围飘散着简洁的图标(时钟、图表、文字符号),象征快速理解和精炼提取
-- Layout: 中心对称布局,标题在上方,主视觉在中心,副标题在下方
-- Decorative elements: 简洁的线条、圆点、极简图标,呼应 Notion 的简约美学
+- Main visual: 一本開啟的學術論文書籍,周圍飄散著簡潔的圖示(時鐘、圖表、文字元號),象徵快速理解和精煉提取
+- Layout: 中心對稱佈局,標題在上方,主視覺在中心,副標題在下方
+- Decorative elements: 簡潔的線條、圓點、極簡圖示,呼應 Notion 的簡約美學
 
 Color scheme:
-- Primary: 深灰色 (#2C2C2C) 用于标题
-- Background: 米白色/浅灰 (#F7F7F5) 干净的背景
-- Accent: 柔和的蓝色 (#5B9BD5) 用于关键元素
+- Primary: 深灰色 (#2C2C2C) 用於標題
+- Background: 米白色/淺灰 (#F7F7F5) 乾淨的背景
+- Accent: 柔和的藍色 (#5B9BD5) 用於關鍵元素
 
 Style notes:
-- Notion 风格的极简设计
-- 留白充足,不拥挤
-- 线条简洁流畅
-- 图标风格统一
-- 整体专业但不失亲和力
-- 强调"5分钟"和"精炼"的概念
-- 适合 GitHub README 封面展示
+- Notion 風格的極簡設計
+- 留白充足,不擁擠
+- 線條簡潔流暢
+- 圖示風格統一
+- 整體專業但不失親和力
+- 強調"5分鐘"和"精煉"的概念
+- 適合 GitHub README 封面展示
 
 Image specifications:
-- Aspect ratio: 16:9 (适合 GitHub README 横幅)
+- Aspect ratio: 16:9 (適合 GitHub README 橫幅)
 - Resolution: 1200x675px
 - Style: Flat design, minimalist, Notion-inspired
 - No gradients, solid colors only

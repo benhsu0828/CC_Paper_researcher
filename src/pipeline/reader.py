@@ -9,7 +9,13 @@ from datetime import date
 
 import httpx
 
-from src.config import PAPERS_DIR, PROJECT_ROOT, load_config
+from src.config import (
+    PAPERS_DIR,
+    PROJECT_ROOT,
+    load_config,
+    load_research_profile,
+    research_profile_block,
+)
 from src.runner import extract_json, run_stage
 from src.store import queue
 
@@ -88,9 +94,12 @@ async def read_one(row: dict, cfg: dict | None = None) -> bool:
             url = "（本論文非 arXiv，請直接閱讀上方本地 PDF）"
         else:
             url = f"https://arxiv.org/abs/{aid}"
+        # read 用 sonnet，研究脈絡讀完整（比照 screen 不截斷）；缺檔退回中性佔位、行為不破
+        profile = research_profile_block(load_research_profile())
         template = (PROJECT_ROOT / "prompts" / "reader.md").read_text(encoding="utf-8")
         prompt = template.format(
             title=title, url=url, pdf_path=str(pdf_path), out_dir=str(out_dir),
+            research_profile=profile,
         )
         log.info("開始閱讀：%s（%s）", title[:50], aid)
         res = await run_stage("read", prompt)

@@ -15,7 +15,11 @@ from src.store import usage as usage_store
 log = logging.getLogger("runner")
 
 # 訂閱額度耗盡時 result 文字常見關鍵字
-_LIMIT_MARKERS = ("usage limit", "rate limit", "quota", "額度", "用量上限", "5-hour", "limit reached")
+_LIMIT_MARKERS = ("usage limit", "rate limit", "quota", "額度", "用量上限", "5-hour",
+                  "limit reached", "session limit", "hit your session")
+# 只有 Claude Code 介面才會吐的特定句子（用來掃模型「正常文字」輸出，避免誤判論文內文）
+_HARNESS_LIMIT_PHRASES = ("hit your session limit", "you've hit your", "usage limit reached",
+                          "session limit · resets", "claude usage limit")
 
 
 class QuotaExhausted(Exception):
@@ -66,10 +70,13 @@ async def run_stage(stage: str, prompt: str, max_turns: int | None = None) -> Ru
         log.warning("SDK 結束時報錯（多半無害，已收到輸出）：%s", text[:200])
 
     out.text = out.all_text[-1] if out.all_text else ""
-    if out.is_error:
-        low = out.result_raw.lower()
-        if any(m in low for m in _LIMIT_MARKERS):
-            raise QuotaExhausted(out.result_raw[:300])
+    # ① is_error 的 result_raw 用較寬的 markers；② 模型把限額訊息當普通文字吐回時，
+    #    只用「介面專屬句子」掃 all_text，避免誤判含 rate limit/quota 字樣的論文內文
+    if out.is_error and any(m in out.result_raw.lower() for m in _LIMIT_MARKERS):
+        raise QuotaExhausted(out.result_raw[:300])
+    blob = (out.result_raw + " " + " ".join(out.all_text)).lower()
+    if any(p in blob for p in _HARNESS_LIMIT_PHRASES):
+        raise QuotaExhausted((out.result_raw or out.text)[:300])
     return out
 
 

@@ -36,7 +36,12 @@ cp .env.example .env             # 填入金鑰（見下）
 | `DISCORD_BOT_TOKEN` / `DISCORD_CHANNEL_ID` | Discord 通知 |
 | `SEMANTIC_SCHOLAR_API_KEY` | Semantic Scholar 搜尋（選用，提高額度） |
 
-研究主題改 [`config.yaml`](config.yaml) 的 `topic` 即可切換領域。
+研究主題改 [`config.yaml`](config.yaml) 的 `topic` 即可切換領域。想讓篩選更貼近自己的研究，
+複製研究脈絡範本並填入你目前的進度與實驗架構（選用，不建也能跑）：
+
+```bash
+cp research_profile.example.md research_profile.md   # 編輯成你的真實研究內容
+```
 
 ## 執行
 
@@ -68,9 +73,66 @@ systemctl --user start paper-reader.service   # 手動測試一次
 journalctl --user -u paper-reader.service -f  # 看日誌
 ```
 
-## 架構與設計細節
+## 架構
 
-完整的 pipeline 設計、各階段實作、關鍵決策與 `.env` 清單見 [`CLAUDE.md`](CLAUDE.md)。
+### Pipeline（stage 順序與資料流）
+
+每篇論文是 SQLite（[`data/queue.db`](data/)）裡的一列，靠 `status` 欄推進；逐 stage 改寫狀態，可中斷續跑。
+
+```
+discovery → rank → screen → read → enrich → review → publish
+ queued     (評分)  selected  analyzed enriched reviewed published
+                    /skipped
+```
+
+| stage | 實作 | 模型 | 產物 / 做的事 |
+|---|---|---|---|
+| discovery | [`src/pipeline/discovery.py`](src/pipeline/discovery.py) | 無 | arXiv + S2 搜尋、去重、排除已讀 → `status=queued` |
+| rank | [`src/pipeline/ranker.py`](src/pipeline/ranker.py) | haiku | recency/citation（Python 算）+ relevance/novelty/**fit**（LLM 評）→ `rank_score` |
+| screen | [`src/pipeline/screener.py`](src/pipeline/screener.py) | opus | 挑值得深讀的，分**核心/探索**兩軌 → `selected`（含 `screen_track`）/ `skipped` |
+| read | [`src/pipeline/reader.py`](src/pipeline/reader.py) + `paper-analyzer` skill | sonnet | `report.html`（Mermaid 架構圖、公式）+ `analysis.json` → `analyzed` |
+| enrich | [`src/pipeline/enrich.py`](src/pipeline/enrich.py) | 無 | 公式轉 MathML、PyMuPDF 抽原文圖 base64、OpenCC 轉繁 → `enriched` |
+| review | [`src/pipeline/review.py`](src/pipeline/review.py) + `academic-paper-reviewer` skill | sonnet | `review.md` + `review.json`（verdict / 銳評 / 優缺點）→ `reviewed` |
+| publish | [`src/pipeline/publish.py`](src/pipeline/publish.py) | 無 | 建 Notion 頁 + Discord 通知（夾帶完整 HTML）→ `published` |
+
+[`src/pipeline/orchestrator.py`](src/pipeline/orchestrator.py) 是總指揮：`run_nightly()` 先 rank+screen，再**逐篇**把 read→…→publish 跑完（單篇失敗不擋其他、額度耗盡 graceful stop）；`run()` 則供 `--stages` 手動逐 stage 補跑。
+
+### 目錄結構
+
+```
+main.py                 入口：解析參數 → orchestrator
+config.yaml             主題、篇數、探索名額、各 stage 模型、權重
+exclude.yaml            已讀清單（標題正規化比對過濾）
+research_profile.md     你的研究脈絡（git 忽略；範本 research_profile.example.md）
+
+src/
+  agent.py              build_options(stage)：模型、工具、安全 hooks、載入 .claude/skills
+  runner.py             run_stage()：跑 SDK query、解析 JSON、偵測額度耗盡、記 token 用量
+  config.py             PROJECT_ROOT / load_config / .env / load_research_profile
+  pipeline/            discovery, ranker, screener, reader, enrich, review, publish, orchestrator
+  store/
+    queue.py            SQLite 佇列 + papers_log.csv 匯出
+    usage.py            夜跑 token 用量記憶體累計（→ Discord footer / 夜跑總結）
+  output/
+    notion.py           建 DB / 建頁 / 上傳圖；文字含 LaTeX 自動轉 Notion equation（KaTeX 渲染）
+    discord.py          每篇通知（附 HTML、token 小計）+ 夜跑總結
+    render.py           Mermaid → PNG（Playwright Chromium）
+    report_parse.py     report.html → 中間 block（後設資料 + 指定章節）
+    text.py             OpenCC 簡→繁（s2twp）
+
+prompts/                各 stage 的 prompt 模板（ranker / screener / reader / extract / review）
+.claude/skills/         paper-analyzer、academic-paper-reviewer（隨專案打包）
+deploy/                 systemd --user service / timer + 安裝腳本
+data/                   queue.db、papers/<id>/（PDF、report.html、analysis.json、review.*、圖）
+```
+
+### 個人化篩選與用量可見
+
+- **研究脈絡感知**：建 `research_profile.md`（複製 `research_profile.example.md` 來改）寫下你目前的研究進度與實驗架構，rank/screen 會據此評分，rank 多一個 **fit**（對你研究的可用性）維度。沒建此檔則退回只用 `topic` 判斷，行為不變。
+- **探索名額**：`config.yaml` 的 `screening.exploration_slots`（預設 1）保留 N 篇「主題相關但跳脫你目前進度」的創新方向，其餘給貼近進度的核心論文（需有 `research_profile.md` 才生效）。
+- **token 用量**：每篇 Discord 通知附該篇 token 小計，夜跑結束發一則總結（完成數、核心/探索分佈、整夜 token 與估算成本、耗時）。訂閱制不實扣，成本僅供估量。
+
+更深入的關鍵決策（為何不用 Gemini 生圖、Notion 結構化 block、OpenCC 後處理…）與 `.env` 細節見 [`CLAUDE.md`](CLAUDE.md)。
 
 ## 內含的 skills
 

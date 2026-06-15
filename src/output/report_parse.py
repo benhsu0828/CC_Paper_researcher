@@ -54,6 +54,10 @@ def _node_items(node) -> list[dict]:
     name = getattr(node, "name", None)
     if name is None:
         return items
+    if name == "pre":
+        # 跳過 Mermaid 流程圖與程式碼區塊：原始碼塞進 Notion 只會是一坨噪音
+        # （整體架構圖另由 publish 截成 PNG 呈現）
+        return items
     if name in ("h3", "h4"):
         txt = node.get_text(" ", strip=True)
         if txt:

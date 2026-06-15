@@ -169,6 +169,54 @@ async def run_nightly(limit: int | None = None, paper: str | None = None) -> Non
     _send_summary(done, todo, started)
 
 
+async def read_inventory(n: int = 1, cfg: dict | None = None,
+                         paper: str | None = None) -> tuple[int, int]:
+    """讀庫存：直接挑 status='queued' 中 rank_score 最高的 n 篇做一條龍，**不跑 discovery/rank/screen**。
+
+    給「有空閒額度時臨時讀一兩篇」用（Discord !read 或 main.py --serve）。沿用 token 累計與夜跑總結。
+    回傳 (完成數, 嘗試數)。
+    """
+    cfg = cfg or load_config()
+    usage.reset()
+    started = time.time()
+
+    if paper:
+        row = queue.get(paper)
+        if not row:
+            log.warning("找不到論文：%s", paper)
+            return (0, 0)
+        todo = [row]
+    else:
+        ranked = queue.fetch(status="queued", order="rank_score DESC")
+        todo = [r for r in ranked if r.get("rank_score") is not None] or ranked
+        todo = todo[: max(1, n)]
+    if not todo:
+        log.info("庫存沒有可讀的 queued 論文")
+        return (0, 0)
+
+    done = 0
+    for row in todo:
+        aid = row["arxiv_id"]
+        usage.begin_paper(aid)
+        try:
+            if await process_paper(row, cfg):
+                done += 1
+                log.info("✅ 讀完一篇（%d/%d）：%s", done, len(todo), aid)
+        except QuotaExhausted as e:
+            log.warning("額度耗盡，graceful stop（已完成 %d 篇）：%s", done, e)
+            queue.export_csv()
+            _send_summary(done, todo, started, stopped="額度耗盡")
+            return (done, len(todo))
+        except Exception as e:  # noqa: BLE001
+            log.error("論文 %s 讀取失敗，跳過：%s", aid, e)
+            queue.update(aid, status="error", error_msg=str(e)[:200])
+            continue
+
+    queue.export_csv()
+    _send_summary(done, todo, started)
+    return (done, len(todo))
+
+
 def _send_summary(done: int, todo: list[dict], started: float, stopped: str = "") -> None:
     """夜跑結束發一則 Discord 總結（含 token 用量），白天回顧昨晚消耗。"""
     try:
