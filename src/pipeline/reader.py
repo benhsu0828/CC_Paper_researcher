@@ -16,10 +16,40 @@ from src.config import (
     load_research_profile,
     research_profile_block,
 )
+from src.pipeline import scholar
 from src.runner import extract_json, run_stage
 from src.store import queue
 
 log = logging.getLogger("reader")
+
+
+def _references_block(row: dict, out_dir, cfg: dict) -> str:
+    """抓/載被引前置文獻並格式化成 prompt 區塊（純 Python 零額度，idempotent）。
+
+    停用或抓取失敗 → 中性佔位字串，reader 行為不破。
+    """
+    rc = (cfg or {}).get("references", {})
+    if not rc.get("enabled", True):
+        return scholar.format_references_block([])
+
+    refs_path = out_dir / "references.json"
+    if refs_path.exists():
+        try:
+            refs = json.loads(refs_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            refs = []
+    else:
+        refs = scholar.fetch_references(
+            row["arxiv_id"], title=row.get("title") or "",
+            limit=rc.get("fetch_limit", 50),
+        )
+        refs_path.write_text(json.dumps(refs, ensure_ascii=False, indent=2), encoding="utf-8")
+    return scholar.format_references_block(
+        refs,
+        max_n=rc.get("max_inject", 10),
+        abstract_top=rc.get("abstract_top", 4),
+        abstract_chars=rc.get("abstract_chars", 160),
+    )
 
 
 def safe_id(arxiv_id: str) -> str:
@@ -96,10 +126,11 @@ async def read_one(row: dict, cfg: dict | None = None) -> bool:
             url = f"https://arxiv.org/abs/{aid}"
         # read 用 sonnet，研究脈絡讀完整（比照 screen 不截斷）；缺檔退回中性佔位、行為不破
         profile = research_profile_block(load_research_profile())
+        references = _references_block(row, out_dir, cfg)
         template = (PROJECT_ROOT / "prompts" / "reader.md").read_text(encoding="utf-8")
         prompt = template.format(
             title=title, url=url, pdf_path=str(pdf_path), out_dir=str(out_dir),
-            research_profile=profile,
+            research_profile=profile, references=references,
         )
         log.info("開始閱讀：%s（%s）", title[:50], aid)
         res = await run_stage("read", prompt)

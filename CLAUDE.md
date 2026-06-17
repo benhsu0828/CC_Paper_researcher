@@ -31,10 +31,10 @@ discovery → rank → screen → read → enrich → review → publish
 | discovery | `src/pipeline/discovery.py` 純 Python | 無 | arXiv + S2，去重，排除 `exclude.yaml`；status=queued |
 | rank | `ranker.py` | haiku | rank_score（recency/citation 由 Python 算，relevance/novelty 由 LLM） |
 | screen | `screener.py` | opus | 挑值得深讀的；selected / skipped |
-| read | `reader.py` + paper-analyzer skill | sonnet | `report.html`（含 Mermaid 架構/流程圖）；status=analyzed |
-| extract | reader 內 `_extract_analysis` | haiku | `analysis.json`（A–H 欄位 + 分數） |
+| read | `reader.py` + paper-analyzer skill | sonnet | `report.html`（含 Mermaid 架構/流程圖）+ `references.json`（S2 被引前置文獻，零額度先抓再注入）；status=analyzed |
+| extract | reader 內 `_extract_analysis` | haiku | `analysis.json`（A–H 欄位 + 分數 + **復現難度 repro_difficulty/repro_reasons**） |
 | **enrich** | `enrich.py` 純 Python，零額度 | 無 | 公式轉 **MathML**（移除 KaTeX）+ PyMuPDF 從 PDF 抽圖 **base64 內嵌** + **OpenCC 簡→繁**（report.html + analysis.json）；**idempotent**（以 report.skill.html 為來源、先剝除舊圖表區塊）；status=enriched |
-| review | `review.py` + academic-paper-reviewer skill | sonnet | quick 模式 + 銳評 → `review.md` + `review.json`（verdict/sharp_take/strengths/weaknesses/score）；status=reviewed |
+| review | `review.py` + academic-paper-reviewer skill | sonnet | quick 模式 + 銳評 + **Evidence Checker** → `review.md` + `review.json`（verdict/sharp_take/strengths/weaknesses/score + **evidence**）+ `citations.json`（S2 後續引用，零額度先抓再注入）；status=reviewed |
 | publish | `publish.py` 純 Python，零額度 | 無 | `output/render.py` 把「整體架構總覽」Mermaid **截成 PNG** + `output/report_parse.py` 從 report.html 抽**後設資料**與**指定章節原文**（討論/侷限/研究脈絡/產品落地）→ `output/notion.py` 建頁 + `output/discord.py` 通知（附 report.html）；status=published |
 
 ## 關鍵設計與決策
@@ -42,6 +42,13 @@ discovery → rank → screen → read → enrich → review → publish
 - **研究脈絡感知篩選（research_profile.md）**：使用者可建 `research_profile.md`（自由文字、git 忽略、範本 `research_profile.example.md`）寫目前研究進度/實驗架構/想解決的問題。`config.load_research_profile()` 載入（rank 取前 ~800 字精簡版省 haiku context、screen 取完整版），`research_profile_block()` 包成 prompt 區塊注入 ranker.md/screener.md 的 `{research_profile}`。**rank 新增 `fit` 維度**（對我研究的可用性，0–100）：有 profile 時 `rel=(relevance+novelty+2*fit)/4`、無 profile 或 fit 缺值退回 `(relevance+novelty)/2`（行為不變，不動 priority_mix 外層權重）。**向後相容**：無此檔一切照舊。
 - **探索名額（2 核心 + 1 探索）**：screen 把每篇標 `core`（貼近目前進度、可直接用）/`explore`（相關但跳脫進度的創新方向）/`skip`。`config.yaml` 的 `screening.exploration_slots`（預設 1）保留 N 篇 explore，其餘給 core；某軌不足以另一軌依 rank 序回補（不浪費總名額）。選中存 `screen_track` 欄（queue 遷移加）。**需有 research_profile.md 才生效**（否則無從分辨「進度」，自動全當 core）。Discord 標題標 `🎯 核心`/`🧭 探索`。
 - **Token 用量可見（夜跑總結 + 每篇 footer）**：SDK `ResultMessage` 帶 `usage`/`total_cost_usd`，`runner.run_stage` 收到後呼叫 `src/store/usage.py`（記憶體內累計，零持久化）的 `record()`。`orchestrator.run_nightly` 開頭 `reset()`、每篇前 `begin_paper(aid)`；每篇 Discord 通知 footer 顯示該篇 token 小計，夜跑結束 `discord.notify_summary()` 發總結（完成數/核心探索分佈/整夜 in·out tokens/估算成本/耗時）。訂閱制不實扣，cost 僅供估量、cache token 折進 input。
+- **引用關係補強（`src/pipeline/scholar.py`，純 Python 零額度、不新增 LLM 呼叫）**：read/review 在呼叫 LLM 前先用 Semantic Scholar API 抓引用關係，把結構化清單注入既有 prompt（input only，吃 cache 折扣）。
+  - **被引前置文獻（backward / references）**：`fetch_references` 抓本論文引用的前作（標題/摘要/年份/被引數/isInfluential），存 `references.json`，注入 `reader.md` 的 `{references}` → 強化「研究脈絡與前置工作」「方法 prior-method 對比」。
+  - **後續引用（forward / citations）+ 引用語境**：`fetch_citations` 抓引用本論文的文獻與 `contexts`，存 `citations.json`，注入 `review.md` 的 `{evidence}` → **Evidence Checker**：依語境分類 支持/反駁/指出侷限/改進（review.json 的 `evidence` 物件）。**新論文常無前向引用** → 退回 backward 角度「本論文相對前作解決/改進了什麼」（`evidence.solves_prior`，由 LLM 從 references 清單判斷聚焦哪幾篇）。
+  - **S2 id 解析**：arXiv id→`ARXIV:<id>`、`s2:<pid>`→`<pid>`、`manual-*`/無 id→用標題打 `/paper/search/match`（best-effort）。429 重試比照 `discovery._from_s2`；任何失敗回 `[]`、用中性佔位字串，**reader/review 行為不破**。
+  - **省 token**：`config.yaml` 的 `references`/`evidence` 控制 `fetch_limit`（零額度多抓、排序用）與 `max_inject`/`abstract_top`/`abstract_chars`/`context_chars`（注入嚴格截斷，influential→被引數排序）；`enabled:false` 完全跳過、回到現狀 token 量。review 端 backward 用 `abstract_top=0`（只給標題＋年，reader 已用過摘要）。
+  - **復現難度**：reader 在 analysis.json 多產 `repro_difficulty`（低/中/高）+ `repro_reasons`（程式碼/資料集/算力/超參數/專有資料），併進既有 read 呼叫、零新增呼叫。
+- **同篇只分析一次（快取續跑）**：`report.html`/`analysis.json`/`review.*`/`references.json`/`citations.json` 都落地，已存在就跳過昂貴步驟（reader/review skill 與 S2 抓取皆 idempotent）。
 - **不用 Gemini 生圖**（key 是 Vertex Express、需開帳單，用戶改方向）。圖改成：架構/流程圖由 paper-analyzer 畫 **Mermaid**；原文圖表用 **PyMuPDF 依圖說(caption)裁切頁面區域**（雙欄論文做欄位偵測，只裁該欄）→ base64。見 `enrich.py` 的 `_caption_crops`。
 - **公式必須 MathML**（不用 KaTeX/LaTeX 文字/Unicode）→ `enrich.py` 用 `latex2mathml` 轉 `$$…$$`/`\(…\)`/`\[…\]`，移除 KaTeX CDN。
 - **Notion 不吃完整 HTML**（report.html 含 base64 圖達 256KB）→ `output/notion.py` 改用「結構化 block」：properties（標題/arXiv/連結/發表日/創新分/相關分/審稿分/審稿結論 select/引用數/主題/處理日）+ 內文 block（銳評 callout、analysis 各節 heading+paragraph、審稿優缺點 bullets），完整 HTML 留本機並由 Discord 夾帶。Notion 限制：單 rich_text ≤2000 字（切 1900）、單次建頁 children ≤100 block。
@@ -66,6 +73,7 @@ discovery → rank → screen → read → enrich → review → publish
 - `src/store/usage.py` — 夜跑 token 用量記憶體累計（reset/begin_paper/record/paper_totals/grand_total）
 - `research_profile.example.md` — 研究脈絡範本（複製成 `research_profile.md` 填寫，後者 git 忽略）
 - `src/output/` — `notion.py`（建 DB/頁/上傳檔/append）、`discord.py`（每篇通知 + `notify_summary` 夜跑總結）、`render.py`（Mermaid→PNG）、`report_parse.py`（HTML→block）、`text.py`（OpenCC）
+- `src/pipeline/scholar.py` — Semantic Scholar 引用關係（純 Python 零額度）：`fetch_references`（backward）/`fetch_citations`（forward + 語境）+ `format_references_block`/`format_citations_block`（注入截斷）+ `_resolve_s2_id`（arXiv/s2/標題 match）
 - `src/pipeline/orchestrator.py` — `run()`（逐 stage）+ `process_paper()`/`run_nightly()`（逐篇一條龍）
 - `deploy/` — systemd `paper-reader.service`/`.timer` + `install_systemd.sh`
 - `.claude/skills/` — paper-analyzer、academic-paper-reviewer（**已隨專案打包成實體目錄**，非 symlink）
@@ -77,7 +85,8 @@ discovery → rank → screen → read → enrich → review → publish
 - ✅ **M5：逐篇一條龍 + systemd 每晚自動** — `process_paper`/`run_nightly`（狀態感知、單篇失敗不擋其他、額度 graceful stop）；`main.py` 預設＝夜跑、`--paper` 單篇端到端；systemd --user timer 每晚 03:00（`deploy/install_systemd.sh`，已安裝啟用）
 - ✅ **code-review + 打包成自包含 GitHub 專案** — 修兩處（process_paper 處理 queued、Notion >100 block 分批 append）；把兩個 skill 從 symlink 改成實體目錄打包進 `.claude/skills/`，刪除上層 `academic-research-skills`/`paper-craft-skills`；加 README + 根 `.gitignore` + `.env.example`；initial commit 已 push 到 `github.com/benhsu0828/CC_Paper_researcher`（main）
 - ✅ **M6：研究脈絡感知 + 探索名額 + token 可見** — `research_profile.md`（rank/screen 注入 + fit 維度）；`screening.exploration_slots` 兩軌篩選（核心/探索，`screen_track`）；`src/store/usage.py` token 累計 → 每篇 Discord footer + 夜跑總結（`notify_summary`）
-- ⬜ 後續可做：跨夜實跑驗證（首夜 03:00）、papers_log.csv 補 review_verdict 欄、長報告 >100 block 的實測
+- ✅ **M7：引用脈絡補強 + 復現難度 + Evidence Checker（皆零新增 LLM 呼叫）** — `src/pipeline/scholar.py`（S2 references/citations 零額度）；reader 注入被引前置文獻（`{references}`）+ analysis.json 加 `repro_difficulty`/`repro_reasons`；review 折進 Evidence Checker（`{evidence}`：forward 分類支持/反駁/侷限/改進；新論文退回 `solves_prior`）；`config.yaml` 加 `references`/`evidence`（嚴格截斷省 token、可關閉）。skill 審核結論：不裝 pdf skill、deep-research 不進 pipeline、paper-analyzer 已是更強的「整理重點」skill
+- ⬜ 後續可做：跨夜實跑驗證（首夜 03:00）、papers_log.csv 補 review_verdict 欄、長報告 >100 block 的實測、（選用）publish 把復現難度/evidence 摘要帶進 Notion
 
 ## .env（git 忽略；範本見 `.env.example`）
 

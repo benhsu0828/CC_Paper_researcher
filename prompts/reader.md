@@ -7,6 +7,12 @@
 
 {research_profile}
 
+## 本論文的被引前置文獻（系統用 Semantic Scholar 自動抓取，依 influential／被引數排序）
+
+{references}
+
+撰寫「**研究脈絡與前置工作**」與「**方法詳解**的 prior-method 對比」時，請據此清單補充——說明本論文站在哪些前作之上、相對它們解決/改進了什麼，幫我追上 related work。**僅在論文原文確實引用或明顯相關時才用，勿硬塞、勿捏造**；清單為空時依論文原文的 related work 書寫即可。
+
 這是無人值守的批次任務，沒有人類可回答問題。所有 skill 中途的決策點，一律採用下列預設值，**不要停下來詢問**：
 
 1. **寫作風格固定為 `academic`（學術深度解讀）**，跳過風格選擇步驟，直接進入產出。
@@ -39,6 +45,8 @@
   "methodology": "A 方法流程 Input→Process→Output",
   "assumptions": "B 隱含假設：哪些條件成立、哪些情境會失效",
   "reproducibility": "B 重現必要條件：資料集、算力、超參數",
+  "repro_difficulty": "復現難度，三選一：低 | 中 | 高",
+  "repro_reasons": "B 復現難度的原因（逐項判斷）：程式碼是否釋出、資料集是否公開可得、算力門檻、超參數/訓練細節是否齊全、是否依賴專有/未公開資料",
   "experiment_fairness": "C 實驗可信度：被淡化處、Baseline 是否合理、成本效益",
   "next_steps": "D 短/中/長期改進與後續研究方向",
   "figure_notes": "F 逐張關鍵圖表解讀，哪張最能代表核心主張",

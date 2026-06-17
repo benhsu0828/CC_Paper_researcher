@@ -43,6 +43,23 @@ figures:
   enabled: true
   max_extract: 12          # 最多抽幾張原文圖表
 
+# 被引前置文獻 backward（reader 的「研究脈絡與前置工作」，純 Python 零額度抓取）
+# 注入 read prompt 的 input，不新增 LLM 呼叫；嚴格截斷以省 token。
+references:
+  enabled: true
+  fetch_limit: 50          # 向 S2 抓多少筆 references（排序用，零額度）
+  max_inject: 10           # 真正注入 prompt 的筆數（influential／高被引優先）
+  abstract_top: 4          # 只有前 N 筆附摘要，其餘僅「標題＋年＋被引數」
+  abstract_chars: 160      # 摘要截斷字數
+
+# Evidence Checker forward（review 階段：後續引用本論文的文獻 → 支持/反駁/侷限/改進）
+# 抓取純 Python 零額度，分類折進既有 review 呼叫；新論文無前向引用時退回 backward 角度。
+evidence:
+  enabled: true
+  fetch_limit: 50
+  max_inject: 12           # forward 引用注入筆數
+  context_chars: 180       # 每筆只留最相關 1 句引用語境、截斷
+
 reviewer:
   mode: quick              # quick | full | methodology-focus
 

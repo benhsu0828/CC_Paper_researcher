@@ -11,6 +11,7 @@ import json
 import logging
 
 from src.config import PAPERS_DIR, PROJECT_ROOT, load_config
+from src.pipeline import scholar
 from src.pipeline.reader import safe_id
 from src.runner import extract_json, run_stage
 from src.store import queue
@@ -26,6 +27,52 @@ def _load_json(path) -> dict:
         return json.loads(raw)
     except json.JSONDecodeError:
         return extract_json(raw) or {}
+
+
+def _load_or_fetch(path, fetch, default_limit: int) -> list[dict]:
+    """讀已落地的 json，否則用 fetch() 抓並存檔（idempotent，可續跑）。"""
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return []
+    items = fetch()
+    path.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+    return items
+
+
+def _evidence_block(row: dict, out_dir, cfg: dict) -> str:
+    """組 Evidence Checker 注入區塊：forward 後續引用 + backward 前置文獻（省 token）。"""
+    ec = (cfg or {}).get("evidence", {})
+    if not ec.get("enabled", True):
+        return "（Evidence Checker 已停用。）"
+
+    aid = row["arxiv_id"]
+    title = row.get("title") or ""
+
+    cits = _load_or_fetch(
+        out_dir / "citations.json",
+        lambda: scholar.fetch_citations(aid, title=title, limit=ec.get("fetch_limit", 50)),
+        ec.get("fetch_limit", 50),
+    )
+    # backward 重用 reader 已抓的 references.json；不存在才抓
+    rc = (cfg or {}).get("references", {})
+    refs = _load_or_fetch(
+        out_dir / "references.json",
+        lambda: scholar.fetch_references(aid, title=title, limit=rc.get("fetch_limit", 50)),
+        rc.get("fetch_limit", 50),
+    )
+
+    forward = scholar.format_citations_block(
+        cits, max_n=ec.get("max_inject", 12), context_chars=ec.get("context_chars", 180))
+    # review 端的 backward 只給標題＋年（abstract_top=0），不重附摘要（reader 已用過）
+    backward = scholar.format_references_block(
+        refs, max_n=rc.get("max_inject", 10), abstract_top=0)
+
+    return (
+        "### 後續引用本論文的文獻（forward，含引用語境）\n" + forward +
+        "\n\n### 本論文引用的前置文獻（backward）\n" + backward
+    )
 
 
 async def review_one(row: dict, cfg: dict | None = None) -> bool:
@@ -50,6 +97,7 @@ async def review_one(row: dict, cfg: dict | None = None) -> bool:
             pdf_path=str(pdf_path),
             analysis_path=str(analysis_path),
             out_dir=str(out_dir),
+            evidence=_evidence_block(row, out_dir, cfg),
         )
         log.info("開始審稿：%s（%s）", title[:50], aid)
         res = await run_stage("review", prompt)
