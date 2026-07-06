@@ -1,6 +1,6 @@
 # 主題：改這裡即可切換研究領域，下次執行自動套用
 # topic 用於 LLM 的相關性判斷；arxiv_query / s2_query 是實際送出的搜尋字串（高召回，靠後續排序+篩選收斂）
-topic: "badminton action analysis, pose estimation, and AI coaching"
+topic: "badminton/sports swing-technique motion analysis and AI coaching feedback; human pose & motion understanding, motion-language models (skeleton/motion-to-text, e.g. MotionGPT/MG-MotionLLM), action quality assessment (AQA), video action differencing (student-vs-coach), and evaluation methodology for coaching-feedback quality (faithfulness, expert agreement). Focus on INDIVIDUAL technique/biomechanics coaching; NOT tactical/broadcast match analysis or shuttlecock trajectory."
 
 # 每晚閱讀篇數（每篇 ≈ 3 個 sonnet session）
 papers_per_run: 3
@@ -14,9 +14,10 @@ screening:
 
 # Discovery 階段：搜尋字串、候選數量與時間範圍
 discovery:
-  arxiv_query: "badminton"                              # arXiv 搜尋字串（單概念高召回）
-  s2_query: "badminton action recognition pose estimation"  # Semantic Scholar 搜尋字串
-  candidates: 40            # 粗排前的候選池大小
+  # 用括號群組 OR（discovery 會包成 all:(...)）；新方向 + 羽球揮拍並存，靠 topic/rank/screen 收斂
+  arxiv_query: '(badminton OR "action quality assessment" OR "motion captioning" OR "motion-language model" OR "video action differencing" OR "sports coaching feedback" OR "skill assessment")'
+  s2_query: "sports action quality assessment skill assessment coaching feedback motion language model badminton swing technique"  # Semantic Scholar（去掉通用 pose/recognition 詞，減少通用 pose-action 論文洗版）
+  candidates: 60            # 粗排前的候選池大小（拓寬題目後放大，避免羽球被新領域擠掉）
   recent_days: 365          # arXiv 只取最近 N 天（羽球領域論文較少，放寬到一年）
   min_year: 2022            # Semantic Scholar 最低年份
 

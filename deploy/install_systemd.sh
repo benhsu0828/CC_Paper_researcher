@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 安裝 paper-reader 的 systemd --user 計時器（每晚 03:00 自動跑）。
+# 安裝 paper-reader 的 systemd --user 計時器（每天午夜 00:00 自動跑）。
 # 預設專案位於 ~/CC_Paper_researcher；若 clone 到別處，請改 unit 檔的路徑。
 set -euo pipefail
 

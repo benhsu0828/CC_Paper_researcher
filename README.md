@@ -7,7 +7,7 @@
 
 ## 它會做什麼
 
-每晚 03:00（systemd timer）自動：
+每天午夜 00:00（systemd timer）自動：
 
 1. **discovery** — 從 arXiv + Semantic Scholar 找指定主題的論文，去重、排除已讀。
 2. **rank / screen** — 粗排（recency/citation + LLM 評分）後，挑出真正值得深讀的幾篇。
@@ -65,13 +65,27 @@ uv run python main.py --add-url https://example.com/paper.pdf       # 任意 PDF
 會以 `manual-<hash>` 為 id 入庫、把 PDF 放到 `data/papers/<id>/paper.pdf`，
 然後 read→enrich→review→publish。`--title` 建議填（沒填會用檔名/網址當標題）。
 
-## 每晚自動（systemd --user timer）
+## 每天自動（systemd --user timer）
 
 ```bash
-bash deploy/install_systemd.sh        # 安裝並啟用每晚 03:00 的計時器
+bash deploy/install_systemd.sh        # 安裝並啟用每天午夜 00:00 的計時器
 systemctl --user start paper-reader.service   # 手動測試一次
 journalctl --user -u paper-reader.service -f  # 看日誌
 ```
+
+### 暫停 / 恢復 / 停止夜跑
+
+```bash
+systemctl --user stop paper-reader.timer       # 暫停：跳過下一次觸發，計時器設定保留，重開機後仍會排程
+systemctl --user start paper-reader.timer      # 恢復：取消暫停，回到原排程
+
+systemctl --user disable --now paper-reader.timer   # 永久停用：移除開機自啟、立即停止計時器
+systemctl --user enable --now paper-reader.timer    # 重新啟用：恢復開機自啟並立即啟動
+
+systemctl --user list-timers paper-reader.timer --no-pager   # 確認下次觸發時間 / 是否仍在排程中
+```
+
+改 [`deploy/paper-reader.timer`](deploy/paper-reader.timer) 的 `OnCalendar` 可調整夜跑時間，改完要重跑 `bash deploy/install_systemd.sh`（或手動 `cp` 到 `~/.config/systemd/user/` 後 `systemctl --user daemon-reload`）才會生效。
 
 ## 架構
 

@@ -24,9 +24,10 @@ def _load_json(path) -> dict:
         return {}
     raw = path.read_text(encoding="utf-8")
     try:
-        return json.loads(raw)
+        data = json.loads(raw)
     except json.JSONDecodeError:
-        return extract_json(raw) or {}
+        data = extract_json(raw)
+    return data if isinstance(data, dict) else {}
 
 
 def _load_or_fetch(path, fetch, default_limit: int) -> list[dict]:
@@ -103,8 +104,8 @@ async def review_one(row: dict, cfg: dict | None = None) -> bool:
         res = await run_stage("review", prompt)
 
         if not review_json.exists():
-            queue.update(aid, status="error",
-                         error_msg=f"未產出 review.json；result={(res.sdk_error or res.result_raw)[:200]}")
+            # 失敗記一次（達上限才設 error 終止）；否則留原狀態下次夜跑續跑
+            queue.mark_failed(aid, f"未產出 review.json；result={(res.sdk_error or res.result_raw)[:200]}")
             log.error("審稿失敗，未見 review.json：%s", aid)
             return False
 

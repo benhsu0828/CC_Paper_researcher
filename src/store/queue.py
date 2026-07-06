@@ -2,6 +2,9 @@
 
 狀態流：queued → selected → analyzed → illustrated → reviewed → published
 其他終端/中斷狀態：deferred（額度耗盡，下次續跑）、skipped（screener 篩掉）、error。
+設計內失敗（如未產出檔案）走 mark_failed：累加 retry_count、留原狀態下次續跑；
+累計達 MAX_RETRIES 才設 status='error' 終止重試（避免永久壞掉的論文每晚重跑、霸佔名額）。
+orchestrator 抓到未預期例外（程式bug）也直接設 status='error'。
 
 每篇論文一列，arxiv_id 為主鍵，天然去重。
 """
@@ -17,6 +20,9 @@ from src.config import CSV_PATH, DB_PATH, DATA_DIR
 
 # 進行中狀態（中斷後下一晚要續跑的）
 ACTIVE_STATUSES = ("selected", "analyzed", "illustrated", "enriched", "reviewed", "deferred")
+
+# ponytail: 每篇累計失敗達此數 → status='error' 停止重試（跨夜累計、不重置）。夠用，真要分 stage 再說。
+MAX_RETRIES = 3
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS papers (
@@ -40,6 +46,7 @@ CREATE TABLE IF NOT EXISTS papers (
     innovation_score REAL,
     relevance_score  REAL,
     error_msg       TEXT,
+    retry_count     INTEGER DEFAULT 0,
     updated_at      TEXT
 );
 """
@@ -53,6 +60,7 @@ _MIGRATIONS = [
     "ALTER TABLE papers ADD COLUMN review_take TEXT",      # 一句銳評
     "ALTER TABLE papers ADD COLUMN published_at TEXT",     # 寫入 Notion 的時間
     "ALTER TABLE papers ADD COLUMN screen_track TEXT",     # 篩選軌：core（貼近進度）/ explore（跳脫進度的創新）
+    "ALTER TABLE papers ADD COLUMN retry_count INTEGER DEFAULT 0",  # 累計失敗次數，達 MAX_RETRIES 設 error
 ]
 
 
@@ -121,6 +129,23 @@ def update(arxiv_id: str, **fields: Any) -> None:
 
 def set_status(arxiv_id: str, status: str) -> None:
     update(arxiv_id, status=status)
+
+
+def mark_failed(arxiv_id: str, msg: str) -> None:
+    """記一次設計內失敗：累加 retry_count。達 MAX_RETRIES → status='error' 終止重試；
+    否則留原狀態，下次夜跑 fetch_active() 續跑。"""
+    now = datetime.now().isoformat(timespec="seconds")
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT retry_count FROM papers WHERE arxiv_id = ?", (arxiv_id,)
+        ).fetchone()
+        n = ((row["retry_count"] if row else 0) or 0) + 1
+        set_err = ", status='error'" if n >= MAX_RETRIES else ""
+        conn.execute(
+            f"UPDATE papers SET retry_count = ?{set_err}, error_msg = ?, updated_at = ? "
+            "WHERE arxiv_id = ?",
+            (n, msg[:200], now, arxiv_id),
+        )
 
 
 def get(arxiv_id: str) -> dict | None:

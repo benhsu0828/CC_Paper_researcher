@@ -1,9 +1,9 @@
 """自動論文閱讀系統入口。
 
 用法：
-    python main.py                        # 完整夜跑：discovery + 逐篇一條龍（read→enrich→review→publish）
+    python main.py                        # 夜跑：處理庫存（rank→screen→逐篇一條龍）。不 discovery
     python main.py --limit 2              # 同上，限本次 2 篇
-    python main.py --dry-run              # 只跑 Discovery（零額度），列候選 + 寫 CSV
+    python main.py --dry-run              # 只跑 Discovery（零額度）補候選 + 寫 CSV（更新研究後跑一次）
     python main.py --stages rank,screen   # 手動只跑指定 stage（逐 stage，補跑/除錯用）
     python main.py --paper 2401.12345     # 把單篇一條龍跑到 published
     python main.py --paper 2401.12345 --stages publish --refresh  # 重發某篇的 Notion 頁
@@ -157,9 +157,9 @@ def main() -> None:
         asyncio.run(orchestrator.run(stages, limit=args.limit,
                                      paper=args.paper, refresh=args.refresh))
     else:
-        # 預設＝完整夜跑：discovery + 逐篇一條龍（read→enrich→review→publish）
-        if not args.paper:
-            run_discovery(cfg)
+        # 預設＝夜跑：rank→screen→逐篇一條龍（read→enrich→review→publish）。
+        # 不自動 discovery——一次找完就夠；更新 research_profile/config 後再手動
+        # `python main.py --dry-run` 補候選（零額度），避免候選池每晚無限膨脹。
         asyncio.run(orchestrator.run_nightly(limit=args.limit, paper=args.paper))
 
 

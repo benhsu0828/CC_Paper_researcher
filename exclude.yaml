@@ -20,3 +20,24 @@ already_read:
   - "An AI-Powered Personalised Badminton Training System with Frame-by-Frame Correction"
   - "A Unified Deep Learning Framework for Pose-Based Badminton Stroke Recognition and Skill Assessment"
   - "CoachMe: Decoding Sport Elements with a Reference-Based Coaching Instruction Generation Model"
+  # ── 拓寬題目後過濾的非相關類別（2026-06-30）──
+  # 天文誤判（廣搜雜訊）
+  - "Multi-band ALMA Polarization Observations of BHB07-11"
+  - "Azimuthal Dust Polarization from Aerodynamically Aligned Grains"
+  # 機器人／人形羽球（非人體動作教學）
+  - "Humanoid Whole-Body Badminton via Multi-Stage Reinforcement"
+  - "Learning Human-Like Badminton Skills for Humanoid Robots"
+  - "HumanX: Toward Agile and Generalizable Humanoid Interaction"
+  - "Hi AirStar, Guide Me to the Badminton Court"
+  # 球體偵測／軌跡／落點／速度（profile 明確不感興趣）
+  - "One-Shot Badminton Shuttle Detection for Mobile Robots"
+  - "TOTNet: Occlusion-Aware Temporal Tracking for Robust Ball"
+  - "Shuttlecock velocity decay after smash and slice shots"
+  # 轉播戰術／選球分析（非揮拍生物力學教學）
+  - "FineBadminton: A Multi-Level Dataset for Fine-Grained Badminton Video Understanding"
+  - "Shot2Tactic-Caption: Multi-Scale Captioning of Badminton"
+  - "BFMD: A Full-Match Badminton Dense Dataset for Dense Shot Caption"
+  - "Doubles Badminton Analysis with Singles"
+  - "RacketVision: A Multiple Racket Sports Benchmark"
+  - "COACH: Collaborative Agents for Contextual Highlighting"
+  - "ShuttleEnv: An Interactive Data-Driven RL Environment"

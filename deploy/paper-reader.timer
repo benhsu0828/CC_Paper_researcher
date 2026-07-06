@@ -1,8 +1,8 @@
 [Unit]
-Description=Run paper-reader nightly at 03:00
+Description=Run paper-reader daily at 00:00
 
 [Timer]
-OnCalendar=*-*-* 03:00:00
+OnCalendar=*-*-* 00:00:00
 Persistent=true
 RandomizedDelaySec=600
 

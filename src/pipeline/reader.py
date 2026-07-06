@@ -99,7 +99,7 @@ def _download_pdf(pdf_url: str, dest) -> bool:
 
 
 async def read_one(row: dict, cfg: dict | None = None) -> bool:
-    """讀一篇。成功 → status='analyzed'；失敗 → status='error'。回傳是否成功。"""
+    """讀一篇。成功 → status='analyzed'；失敗則留在原狀態（記 error_msg，下次續跑）。回傳是否成功。"""
     cfg = cfg or load_config()
     aid = row["arxiv_id"]
     out_dir = PAPERS_DIR / safe_id(aid)
@@ -136,8 +136,8 @@ async def read_one(row: dict, cfg: dict | None = None) -> bool:
         res = await run_stage("read", prompt)
 
         if not report.exists():
-            queue.update(aid, status="error",
-                         error_msg=f"未產出 report.html；result={(res.sdk_error or res.result_raw)[:200]}")
+            # 失敗記一次（達上限才設 error 終止）；否則留原狀態下次夜跑續跑
+            queue.mark_failed(aid, f"未產出 report.html；result={(res.sdk_error or res.result_raw)[:200]}")
             log.error("閱讀失敗，未見 report.html：%s", aid)
             return False
 

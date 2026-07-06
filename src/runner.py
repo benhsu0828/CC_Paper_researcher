@@ -90,11 +90,14 @@ def extract_json(text: str):
             return json.loads(fence.group(1).strip())
         except json.JSONDecodeError:
             pass
-    # 退而求其次：掃描第一個平衡的 [...] 或 {...}
-    for opener, closer in (("[", "]"), ("{", "}")):
-        start = text.find(opener)
-        if start == -1:
-            continue
+    # 退而求其次：掃描第一個平衡的 [...] 或 {...}。依各候選在原文中第一次出現的位置排序嘗試，
+    # 而非固定優先序，避免內層陣列（如物件裡的某個欄位剛好是陣列）搶先於外層物件被誤判為頂層結構。
+    candidates = sorted(
+        (pos, opener, closer)
+        for opener, closer in (("[", "]"), ("{", "}"))
+        for pos in [text.find(opener)] if pos != -1
+    )
+    for start, opener, closer in candidates:
         depth = 0
         for i in range(start, len(text)):
             if text[i] == opener:

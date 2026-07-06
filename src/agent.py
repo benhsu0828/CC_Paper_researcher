@@ -93,6 +93,8 @@ def build_options(stage: str, max_turns: int | None = None) -> ClaudeAgentOption
         cwd=str(PROJECT_ROOT),
         cli_path=str(CLI_PATH) if CLI_PATH.exists() else None,
         permission_mode="bypassPermissions",
+        # SDK 預設 1MB；paper-analyzer 產出的長 HTML/思考內容常單行超過 → JSON decode 崩潰
+        max_buffer_size=10 * 1024 * 1024,
     )
 
     # 純文字判斷階段：不載 skills、不給工具

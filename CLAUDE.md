@@ -18,9 +18,9 @@ uv run python main.py --add-url <pdf_url>             # 加非 arXiv 論文（PD
 
 - **非 arXiv 論文**：`main.add_manual_paper()` 以 `manual-<md5[:10]>` 為 id 入庫（source=manual）。`--add-pdf` 把 PDF 複製到 `data/papers/<id>/paper.pdf`（reader 偵測已存在就不下載、skill 直接 Read 本地 PDF）；`--add-url` 設 pdf_url 由 reader 用 httpx 下載（不受 WebFetch 白名單限制）。`process_paper` 已會處理 `queued`。manual 論文不產生 bogus arXiv 連結（reader prompt / notion 連結屬性 / metadata arXiv 行都判斷 `manual-` 前綴）。
 
-- **預設（無 --stages）＝夜跑**：`orchestrator.run_nightly()` 先 rank+screen，再**逐篇**把每篇 read→enrich→review→publish 跑完（`process_paper`，狀態感知可續跑）。單篇失敗只記 error 不擋其他；額度耗盡 graceful stop。
-- **--stages＝逐 stage**：沿用 `orchestrator.run()`（手動補跑/除錯）。
-- **每晚自動**：`bash deploy/install_systemd.sh` 裝 systemd --user timer（每晚 03:00）。
+- **預設（無 --stages）＝夜跑**：`orchestrator.run_nightly()` 先 rank+screen，再**逐篇**把每篇 read→enrich→review→publish 跑完（`process_paper`，狀態感知可續跑）。**預設不跑 discovery**（一次找完就夠；更新研究後手動 `--dry-run` 補候選）。單篇設計內失敗走 `queue.mark_failed`（累加 retry_count、留原狀態下次續跑，達 `MAX_RETRIES=3` 才設 status='error' 終止，避免壞論文每晚霸佔名額）；額度耗盡 graceful stop。
+- **--stages＝逐 stage**：沿用 `orchestrator.run()`（手動補跑/除錯）。`--stages discovery,...` 才會找論文。
+- **每天自動**：`bash deploy/install_systemd.sh` 裝 systemd --user timer（每天午夜 00:00）。
 
 ## Pipeline（stage 順序）
 

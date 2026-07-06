@@ -35,8 +35,10 @@ def _load_json(path) -> dict:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        data = extract_json(raw) or {}
-    return convert_json_values(data) if isinstance(data, (dict, list)) else data
+        data = extract_json(raw)
+    if not isinstance(data, dict):
+        return {}
+    return convert_json_values(data)
 
 
 async def publish_one(row: dict, cfg: dict | None = None, refresh: bool = False) -> bool:
@@ -75,7 +77,11 @@ async def publish_one(row: dict, cfg: dict | None = None, refresh: bool = False)
                     tags=analysis.get("tags") if isinstance(analysis, dict) else None)
                 log.info("Notion 頁面已建立：%s → %s", aid, notion_url)
             except Exception as e:  # noqa: BLE001
-                queue.update(aid, status="error", error_msg=f"Notion 失敗：{str(e)[:200]}")
+                # refresh 已封存舊頁 → 清 notion_url，否則下次 publish 會因 notion_url 存在而跳過建頁、
+                # 直接標 published 指向已封存的死連結。清掉後下次夜跑 fetch_active() 重建。
+                if archive_url:
+                    queue.update(aid, notion_url="")
+                queue.mark_failed(aid, f"Notion 失敗：{str(e)[:200]}")
                 log.error("Notion 寫入失敗：%s（%s）", aid, e)
                 return False
     else:
